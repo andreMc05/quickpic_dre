@@ -46,9 +46,9 @@ function useSvgConverter(props: {
     if (!ctx) throw new Error("Failed to get canvas context");
 
     // Trigger a "save image" of the resulting canvas content
-    const saveImage = () => { 
+    const saveImage = () => {
       if (props.canvas) {
-         const dataURL = props.canvas.toDataURL("image/png");
+        const dataURL = props.canvas.toDataURL("image/png");
         const link = document.createElement("a");
         link.href = dataURL;
         const svgFileName = props.imageMetadata.name ?? "svg_converted";
@@ -107,13 +107,13 @@ interface BatchItem {
 
 // Modify the batch conversion utility to not use hooks
 async function convertSvgToPng(item: BatchItem) {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Failed to get canvas context");
 
   // Scale the SVG
   const scaledSvg = scaleSvg(item.svgContent, item.scale);
-  
+
   // Set canvas dimensions
   canvas.width = item.imageMetadata.width * item.scale;
   canvas.height = item.imageMetadata.height * item.scale;
@@ -128,14 +128,20 @@ async function convertSvgToPng(item: BatchItem) {
       link.href = dataURL;
       link.download = item.fileName;
       link.click();
-      resolve(); 
+      resolve();
     };
     img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(scaledSvg)}`;
   });
 }
 
 // Update BatchPreview to use the new conversion function
-function BatchPreview({ items, onRemove }: { items: BatchItem[]; onRemove: (id: string) => void }) {
+function BatchPreview({
+  items,
+  onRemove,
+}: {
+  items: BatchItem[];
+  onRemove: (id: string) => void;
+}) {
   if (items.length === 0) return null;
 
   const handleDownloadAll = async () => {
@@ -148,7 +154,9 @@ function BatchPreview({ items, onRemove }: { items: BatchItem[]; onRemove: (id: 
     <div className="fixed bottom-4 right-4 z-50">
       <div className="rounded-lg bg-gray-800 p-4 shadow-lg">
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-white">Batch Queue ({items.length})</h3>
+          <h3 className="text-sm font-medium text-white">
+            Batch Queue ({items.length})
+          </h3>
           <button
             onClick={() => void handleDownloadAll()}
             className="rounded bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700"
@@ -158,8 +166,13 @@ function BatchPreview({ items, onRemove }: { items: BatchItem[]; onRemove: (id: 
         </div>
         <div className="flex max-h-48 flex-col gap-2 overflow-y-auto">
           {items.map((item) => (
-            <div key={item.id} className="flex items-center justify-between gap-4 rounded bg-gray-700 p-2">
-              <span className="text-sm text-white">{item.fileName} ({item.scale}x)</span>
+            <div
+              key={item.id}
+              className="flex items-center justify-between gap-4 rounded bg-gray-700 p-2"
+            >
+              <span className="text-sm text-white">
+                {item.fileName} ({item.scale}x)
+              </span>
               <button
                 onClick={() => onRemove(item.id)}
                 className="text-red-400 hover:text-red-300"
@@ -247,9 +260,26 @@ function SVGToolCore(props: { fileUploaderProps: FileUploaderResult }) {
   const effectiveScale = scale === "custom" ? customScale : scale;
 
   const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
+  const [duplicateToast, setDuplicateToast] = useState(false);
 
   const addToBatch = (item: BatchItem) => {
-    setBatchItems((prev) => [...prev, item]);
+    setBatchItems((prev) => {
+      const isDuplicate = prev.some(
+        (existingItem) =>
+          existingItem.scale === item.scale &&
+          existingItem.fileName === item.fileName,
+      );
+
+      if (isDuplicate) {
+        // Show toast
+        setDuplicateToast(true);
+        // Hide toast after 3 seconds
+        setTimeout(() => setDuplicateToast(false), 3000);
+        return prev;
+      }
+
+      return [...prev, item];
+    });
   };
 
   const removeFromBatch = (id: string) => {
@@ -304,20 +334,29 @@ function SVGToolCore(props: { fileUploaderProps: FileUploaderResult }) {
         onCustomValueChange={setCustomScale}
       />
 
-      {/* Action Buttons */}
-      <div className="flex gap-3">
-        <button
-          onClick={cancel}
-          className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-red-800"
-        >
-          Cancel
-        </button>
-        <SaveAsPngButton
-          svgContent={rawContent}
-          scale={effectiveScale}
-          imageMetadata={imageMetadata}
-          onAddToBatch={addToBatch}
-        />
+      {/* Action Buttons and Toast Container */}
+      <div className="flex flex-col items-center gap-3">
+        <div className="flex gap-3">
+          <button
+            onClick={cancel}
+            className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-red-800"
+          >
+            Cancel
+          </button>
+          <SaveAsPngButton
+            svgContent={rawContent}
+            scale={effectiveScale}
+            imageMetadata={imageMetadata}
+            onAddToBatch={addToBatch}
+          />
+        </div>
+
+        {/* Duplicate Toast */}
+        {duplicateToast && (
+          <div className="animate-fade-in rounded-md px-4 py-2 text-sm text-white">
+            This size conversion is already in the batch
+          </div>
+        )}
       </div>
 
       {/* Batch Preview */}
