@@ -96,108 +96,14 @@ function SVGRenderer({ svgContent }: SVGRendererProps) {
   return <div ref={containerRef} />;
 }
 
-// Add new type for batch items
-interface BatchItem {
-  id: string;
-  scale: number;
-  fileName: string;
-  svgContent: string;
-  imageMetadata: { width: number; height: number; name: string };
-}
-
-// Modify the batch conversion utility to not use hooks
-async function convertSvgToPng(item: BatchItem) {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Failed to get canvas context");
-
-  // Scale the SVG
-  const scaledSvg = scaleSvg(item.svgContent, item.scale);
-
-  // Set canvas dimensions
-  canvas.width = item.imageMetadata.width * item.scale;
-  canvas.height = item.imageMetadata.height * item.scale;
-
-  // Create and load image
-  return new Promise<void>((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      ctx.drawImage(img, 0, 0);
-      const dataURL = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.href = dataURL;
-      link.download = item.fileName;
-      link.click();
-      resolve();
-    };
-    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(scaledSvg)}`;
-  });
-}
-
-// Update BatchPreview to use the new conversion function
-function BatchPreview({
-  items,
-  onRemove,
-}: {
-  items: BatchItem[];
-  onRemove: (id: string) => void;
-}) {
-  if (items.length === 0) return null;
-
-  const handleDownloadAll = async () => {
-    for (const item of items) {
-      await convertSvgToPng(item);
-    }
-  };
-
-  return (
-    <div className="fixed bottom-4 right-4 z-50">
-      <div className="rounded-lg bg-gray-800 p-4 shadow-lg">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-white">
-            Batch Queue ({items.length})
-          </h3>
-          <button
-            onClick={() => void handleDownloadAll()}
-            className="rounded bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700"
-          >
-            Download All
-          </button>
-        </div>
-        <div className="flex max-h-48 flex-col gap-2 overflow-y-auto">
-          {items.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between gap-4 rounded bg-gray-700 p-2"
-            >
-              <span className="text-sm text-white">
-                {item.fileName} ({item.scale}x)
-              </span>
-              <button
-                onClick={() => onRemove(item.id)}
-                className="text-red-400 hover:text-red-300"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Modify SaveAsPngButton to include batch functionality
 function SaveAsPngButton({
   svgContent,
   scale,
   imageMetadata,
-  onAddToBatch,
 }: {
   svgContent: string;
   scale: number;
   imageMetadata: { width: number; height: number; name: string };
-  onAddToBatch: (item: BatchItem) => void;
 }) {
   const [canvasRef, setCanvasRef] = useState<HTMLCanvasElement | null>(null);
   const { convertToPng, canvasProps } = useSvgConverter({
@@ -210,7 +116,7 @@ function SaveAsPngButton({
   const plausible = usePlausible();
 
   return (
-    <div className="flex gap-2">
+    <div>
       <canvas ref={setCanvasRef} {...canvasProps} hidden />
       <button
         onClick={() => {
@@ -220,21 +126,6 @@ function SaveAsPngButton({
         className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-md transition-colors duration-200 hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75"
       >
         Save as PNG
-      </button>
-      <button
-        onClick={() => {
-          plausible("add-to-batch");
-          onAddToBatch({
-            id: crypto.randomUUID(),
-            scale,
-            fileName: `${imageMetadata.name.replace(".svg", "")}-${scale}x.png`,
-            svgContent,
-            imageMetadata,
-          });
-        }}
-        className="rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white shadow-md transition-colors duration-200 hover:bg-orange-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75"
-      >
-        Add to Batch
       </button>
     </div>
   );
@@ -258,33 +149,6 @@ function SVGToolCore(props: { fileUploaderProps: FileUploaderResult }) {
 
   // Get the actual numeric scale value
   const effectiveScale = scale === "custom" ? customScale : scale;
-
-  const [batchItems, setBatchItems] = useState<BatchItem[]>([]);
-  const [duplicateToast, setDuplicateToast] = useState(false);
-
-  const addToBatch = (item: BatchItem) => {
-    setBatchItems((prev) => {
-      const isDuplicate = prev.some(
-        (existingItem) =>
-          existingItem.scale === item.scale &&
-          existingItem.fileName === item.fileName,
-      );
-
-      if (isDuplicate) {
-        // Show toast
-        setDuplicateToast(true);
-        // Hide toast after 3 seconds
-        setTimeout(() => setDuplicateToast(false), 3000);
-        return prev;
-      }
-
-      return [...prev, item];
-    });
-  };
-
-  const removeFromBatch = (id: string) => {
-    setBatchItems((prev) => prev.filter((item) => item.id !== id));
-  };
 
   if (!imageMetadata)
     return (
@@ -334,33 +198,20 @@ function SVGToolCore(props: { fileUploaderProps: FileUploaderResult }) {
         onCustomValueChange={setCustomScale}
       />
 
-      {/* Action Buttons and Toast Container */}
-      <div className="flex flex-col items-center gap-3">
-        <div className="flex gap-3">
-          <button
-            onClick={cancel}
-            className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-red-800"
-          >
-            Cancel
-          </button>
-          <SaveAsPngButton
-            svgContent={rawContent}
-            scale={effectiveScale}
-            imageMetadata={imageMetadata}
-            onAddToBatch={addToBatch}
-          />
-        </div>
-
-        {/* Duplicate Toast */}
-        {duplicateToast && (
-          <div className="animate-fade-in rounded-md px-4 py-2 text-sm text-white">
-            This size conversion is already in the batch
-          </div>
-        )}
+      {/* Action Buttons */}
+      <div className="flex gap-3">
+        <button
+          onClick={cancel}
+          className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-red-800"
+        >
+          Cancel
+        </button>
+        <SaveAsPngButton
+          svgContent={rawContent}
+          scale={effectiveScale}
+          imageMetadata={imageMetadata}
+        />
       </div>
-
-      {/* Batch Preview */}
-      <BatchPreview items={batchItems} onRemove={removeFromBatch} />
     </div>
   );
 }
