@@ -67,29 +67,19 @@ export function SVGScaleSelector({
         {selected === "custom" && (
           <input
             type="number"
-            min="1"
+            min="0"
             max="64"
             step="1"
             value={customValue}
             onChange={(e) => {
-              // Clear input if first character is 0
-              if (e.target.value.startsWith("0")) {
-                e.target.value = "";
-                return;
-              }
-
-              const parsed = parseFloat(e.target.value);
-              const value = Math.min(
-                64,
-                Math.max(1, isNaN(parsed) ? 1 : parsed),
-              );
+              const value = Math.min(64, parseFloat(e.target.value));
               onCustomValueChange?.(value);
             }}
             onKeyDown={(e) => {
               if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
 
               e.preventDefault();
-              const currentValue = customValue ?? 1;
+              const currentValue = customValue ?? 0;
               let step = 1;
 
               if (e.shiftKey) step = 10;
@@ -100,7 +90,7 @@ export function SVGScaleSelector({
 
               const clampedValue = Math.min(
                 64,
-                Math.max(1, Number(newValue.toFixed(1))),
+                Math.max(0, Number(newValue.toFixed(1))),
               );
               onCustomValueChange?.(clampedValue);
             }}
